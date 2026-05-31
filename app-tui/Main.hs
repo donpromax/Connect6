@@ -27,6 +27,7 @@ data UI = UI
   , uiOver    :: !(Maybe Outcome)
   , uiCursor  :: !Pos
   , uiHistory :: ![GameState]   -- ^ past human-to-move states, for undo
+  , uiHint    :: ![Pos]         -- ^ cells the Hard AI suggests (the hint)
   }
 
 main :: IO ()
@@ -52,7 +53,7 @@ freshUI :: Level -> Player -> UI
 freshUI level human =
   let cfg = defaultConfig { configHuman = human, configLevel = level }
       mid = (configSize cfg + 1) `div` 2
-  in UI (initialState cfg) Nothing (mid, mid) []
+  in UI (initialState cfg) Nothing (mid, mid) [] []
 
 humanOf :: UI -> Player
 humanOf = configHuman . gsConfig . uiState
@@ -62,7 +63,7 @@ curLevel = configLevel . gsConfig . uiState
 
 -- | The current screen for a UI.
 frame :: UI -> String
-frame ui = render (humanOf ui) (uiOver ui) (uiCursor ui) (uiState ui)
+frame ui = render (uiHint ui) (humanOf ui) (uiOver ui) (uiCursor ui) (uiState ui)
 
 -- The interactive loop -------------------------------------------------------
 
@@ -76,15 +77,33 @@ loop ui = do
     KRestart  -> loop (settle (freshUI (curLevel ui) (humanOf ui)))
     KLevel l  -> loop (settle (freshUI l (humanOf ui)))   -- switch difficulty, new game
     KUndo     -> loop (undo ui)
+    KHint     -> giveHint ui >>= loop
     _ | Just _ <- uiOver ui -> loop ui          -- game over: only r/q/level/undo act
-    KPlace    -> loop (settle (tryPlace ui))
+    KPlace    -> loop (clearHint (settle (tryPlace ui)))
     KOther    -> loop ui
     dir       -> loop ui { uiCursor = moveCursor (boardSize (gsBoard (uiState ui))) dir (uiCursor ui) }
+
+-- | Ask the Hard AI to suggest the human's move (blocks briefly while it
+-- searches). Only meaningful on the human's turn.
+giveHint :: UI -> IO UI
+giveHint ui
+  | Just _ <- uiOver ui                  = return ui
+  | gsToMove (uiState ui) /= humanOf ui  = return ui
+  | otherwise = do
+      putStr (frame ui)                  -- redraw first so the brief pause is visible
+      hFlush stdout
+      let gs   = uiState ui
+          hcfg = (gsConfig gs) { configLevel = Hard }
+      return ui { uiHint = chooseMoves hcfg (gsBoard gs) (gsToMove gs) (gsRemaining gs) }
+
+-- | Drop a displayed hint (a placement invalidates it).
+clearHint :: UI -> UI
+clearHint ui = ui { uiHint = [] }
 
 -- | Revert to the previous human-to-move state, if any.
 undo :: UI -> UI
 undo ui = case uiHistory ui of
-  (prev : rest) -> ui { uiState = prev, uiOver = Nothing, uiHistory = rest }
+  (prev : rest) -> ui { uiState = prev, uiOver = Nothing, uiHistory = rest, uiHint = [] }
   []            -> ui
 
 -- | Place the human's stone under the cursor, if legal, then let the AI reply.

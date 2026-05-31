@@ -14,7 +14,7 @@ import Connect6.Types
 import Connect6.Board (cellAt)
 
 -- | A classified key press.
-data Key = KUp | KDown | KLeft | KRight | KPlace | KUndo | KQuit | KRestart
+data Key = KUp | KDown | KLeft | KRight | KPlace | KUndo | KHint | KQuit | KRestart
          | KLevel Level | KOther
   deriving (Eq, Show)
 
@@ -31,6 +31,8 @@ classifyKey c escSeq = case c of
   '\r'   -> KPlace
   'u'    -> KUndo
   'U'    -> KUndo
+  '?'    -> KHint
+  'p'    -> KHint
   '1'    -> KLevel Easy
   '2'    -> KLevel Medium
   '3'    -> KLevel Hard
@@ -72,10 +74,12 @@ reset = esc "0m"
 paint :: Int -> Int -> String
 paint bg fg = esc ("48;5;" ++ show bg ++ ";38;5;" ++ show fg ++ "m")
 
-woodBg, cursorBg, lastBg, emptyFg, blackFg, whiteFg :: Int
+woodBg, cursorBg, lastBg, hintBg, hintFg, emptyFg, blackFg, whiteFg :: Int
 woodBg   = 180   -- tan board
 cursorBg = 150   -- highlighted selection
 lastBg   = 215   -- most-recent stones
+hintBg   = 71    -- AI hint cell (green)
+hintFg   = 16    -- hint glyph
 emptyFg  = 94    -- faint grid dot
 blackFg  = 16    -- black stone
 whiteFg  = 231   -- white stone
@@ -86,16 +90,16 @@ pad2 s = replicate (2 - length s) ' ' ++ s
 
 -- Screen ---------------------------------------------------------------------
 
--- | Render the whole screen for the given board, cursor, and outcome.
-render :: Player -> Maybe Outcome -> Pos -> GameState -> String
-render human outcome cursor gs = concat
+-- | Render the whole screen. @hint@ holds cells the AI suggests (highlighted).
+render :: [Pos] -> Player -> Maybe Outcome -> Pos -> GameState -> String
+render hint human outcome cursor gs = concat
   [ esc "2J", esc "H"                           -- clear, home cursor
   , "  Connect6 / 六子棋\n\n"
   , header
   , concatMap rowLine [1 .. n]
-  , "\n  " ++ statusLine human outcome gs ++ "\n"
+  , "\n  " ++ statusLine hint human outcome gs ++ "\n"
   , "  Difficulty: " ++ show (configLevel (gsConfig gs)) ++ "  (1 easy / 2 medium / 3 hard)\n"
-  , "  Move: arrows/WASD/hjkl  Place: space  Undo: u  New game: r  Quit: q\n"
+  , "  Move: arrows/WASD/hjkl  Place: space  Undo: u  Hint: ?  New game: r  Quit: q\n"
   ]
   where
     n         = boardSize board
@@ -107,22 +111,27 @@ render human outcome cursor gs = concat
 
     cell r c =
       let pos = (r, c)
-          bg | pos == cursor          = cursorBg
-             | pos `elem` lastMoves    = lastBg
-             | otherwise               = woodBg
+          isHint = pos `elem` hint
+          bg | pos == cursor        = cursorBg
+             | isHint               = hintBg
+             | pos `elem` lastMoves = lastBg
+             | otherwise            = woodBg
           (fg, glyph) = case cellAt board pos of
-                          Empty       -> (emptyFg, '.')
-                          Stone Black -> (blackFg, '@')
-                          Stone White -> (whiteFg, 'O')
+                          Empty | isHint     -> (hintFg, '?')
+                                | otherwise  -> (emptyFg, '.')
+                          Stone Black        -> (blackFg, '@')
+                          Stone White        -> (whiteFg, 'O')
       in paint bg fg ++ [glyph] ++ " " ++ reset
 
 -- | One-line status: whose turn (and how many stones), or the result.
-statusLine :: Player -> Maybe Outcome -> GameState -> String
-statusLine human outcome gs = case outcome of
+statusLine :: [Pos] -> Player -> Maybe Outcome -> GameState -> String
+statusLine hint human outcome gs = case outcome of
   Just (Won pl) -> show pl ++ tag pl ++ " wins!  Press r for a new game."
   Just Draw     -> "Draw - the board is full.  Press r for a new game."
-  Nothing       -> show (gsToMove gs) ++ who
-                     ++ " to move - " ++ show (gsRemaining gs) ++ " stone(s) this turn"
+  Nothing
+    | not (null hint) -> "Hint: the Hard AI suggests the green '?' cell(s)"
+    | otherwise       -> show (gsToMove gs) ++ who
+                           ++ " to move - " ++ show (gsRemaining gs) ++ " stone(s) this turn"
   where
     who    = if gsToMove gs == human then " (you)" else " (AI)"
     tag pl = if pl == human then " (you)" else " (AI)"

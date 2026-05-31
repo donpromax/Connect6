@@ -34,6 +34,8 @@ data UI = UI
   , uiHistory  :: ![GameState]        -- ^ past human-to-move states, for undo
   , uiThinking :: !(Maybe (MVar [Pos]))  -- ^ in-flight AI search, if any
   , uiAnim     :: !Float              -- ^ seconds elapsed (drives the spinner)
+  , uiHint     :: ![Pos]              -- ^ cells the Hard AI suggests (the hint)
+  , uiHintReq  :: !(Maybe (MVar [Pos]))  -- ^ in-flight hint search, if any
   }
 
 -- macOS system sounds (silently ignored if @afplay@ is unavailable).
@@ -61,7 +63,7 @@ main = do
 newGame :: Level -> Player -> UI
 newGame level human =
   let cfg = defaultConfig { configHuman = human, configLevel = level }
-  in UI (initialState cfg) Nothing (mkLayout (configSize cfg)) Nothing [] Nothing 0
+  in UI (initialState cfg) Nothing (mkLayout (configSize cfg)) Nothing [] Nothing 0 [] Nothing
 
 humanOf :: UI -> Player
 humanOf = configHuman . gsConfig . uiState
@@ -86,10 +88,30 @@ handleEvent (EventKey (Char 'r') Down _ _) ui = pure (newGame (curLevel ui) (hum
 handleEvent (EventKey (Char 'b') Down _ _) _  = pure (newGame Medium Black)
 handleEvent (EventKey (Char 'w') Down _ _) _  = pure (newGame Medium White)
 handleEvent (EventKey (Char 'u') Down _ _) ui = pure (if isJust (uiThinking ui) then ui else undo ui)
+handleEvent (EventKey (Char 'h') Down _ _) ui = requestHint ui
+handleEvent (EventKey (Char '?') Down _ _) ui = requestHint ui
 handleEvent (EventKey (Char '1') Down _ _) ui = pure (newGame Easy   (humanOf ui))
 handleEvent (EventKey (Char '2') Down _ _) ui = pure (newGame Medium (humanOf ui))
 handleEvent (EventKey (Char '3') Down _ _) ui = pure (newGame Hard   (humanOf ui))
 handleEvent _ ui = pure ui
+
+-- | Ask the Hard AI to suggest the human's next move (computed in the
+-- background, like an AI turn). Ignored unless it is the human's turn.
+requestHint :: UI -> IO UI
+requestHint ui
+  | isJust (uiThinking ui)               = pure ui
+  | isJust (uiHintReq ui)                = pure ui
+  | Just _ <- uiOver ui                  = pure ui
+  | gsToMove (uiState ui) /= humanOf ui  = pure ui
+  | otherwise = do
+      mv <- newEmptyMVar
+      let gs   = uiState ui
+          hcfg = (gsConfig gs) { configLevel = Hard }
+      _ <- forkIO $ do
+             let picks = chooseMoves hcfg (gsBoard gs) (gsToMove gs) (gsRemaining gs)
+             _ <- evaluate (foldl' (\a (r, c) -> a + r + c) 0 picks)
+             putMVar mv picks
+      pure ui { uiHintReq = Just mv }
 
 -- | Place a human stone (ignored while the AI is thinking or the game is over).
 handleClick :: (Float, Float) -> UI -> IO UI
@@ -98,8 +120,12 @@ handleClick pt ui
   | Just _ <- uiOver ui                 = pure ui
   | gsToMove (uiState ui) /= humanOf ui = pure ui
   | Just pos <- pixelToCell (uiLayout ui) pt
-  , isEmpty (gsBoard (uiState ui)) pos  = applyOneIO humanSound pos (pushHistory ui)
+  , isEmpty (gsBoard (uiState ui)) pos  = applyOneIO humanSound pos (clearHint (pushHistory ui))
   | otherwise                           = pure ui
+
+-- | Drop any displayed or in-flight hint (a placement/undo invalidates it).
+clearHint :: UI -> UI
+clearHint ui = ui { uiHint = [], uiHintReq = Nothing }
 
 -- | Snapshot the current state at the start of the human's turn.
 pushHistory :: UI -> UI
@@ -110,7 +136,7 @@ pushHistory ui
 -- | Revert to the previous human-to-move state, if any.
 undo :: UI -> UI
 undo ui = case uiHistory ui of
-  (prev : rest) -> ui { uiState = prev, uiOver = Nothing, uiHistory = rest }
+  (prev : rest) -> clearHint ui { uiState = prev, uiOver = Nothing, uiHistory = rest }
   []            -> ui
 
 -- | Place one stone, play its sound, and record the outcome.
@@ -121,21 +147,32 @@ applyOneIO sfx pos ui = do
     Finished gs o -> playSound winSound >> pure ui { uiState = gs, uiOver = Just o }
     Continue gs   -> pure ui { uiState = gs }
 
--- | Per-frame driver: advances the AI's turn without blocking the UI.
+-- | Per-frame driver: collects a finished hint, then advances the AI's turn,
+-- all without blocking the UI.
 stepIO :: Float -> UI -> IO UI
-stepIO dt ui0 =
-  let ui = ui0 { uiAnim = uiAnim ui0 + dt }
-  in case uiOver ui of
-       Just _ -> pure ui
-       Nothing
-         | gsToMove (uiState ui) == humanOf ui -> pure ui
-         | otherwise -> case uiThinking ui of
-             Nothing -> startThinking ui
-             Just mv -> do
-               res <- tryTakeMVar mv
-               case res of
-                 Nothing    -> pure ui                          -- still searching
-                 Just picks -> applyPicks picks ui { uiThinking = Nothing }
+stepIO dt ui0 = do
+  ui <- pollHint (ui0 { uiAnim = uiAnim ui0 + dt })
+  case uiOver ui of
+    Just _ -> pure ui
+    Nothing
+      | gsToMove (uiState ui) == humanOf ui -> pure ui
+      | otherwise -> case uiThinking ui of
+          Nothing -> startThinking ui
+          Just mv -> do
+            res <- tryTakeMVar mv
+            case res of
+              Nothing    -> pure ui                          -- still searching
+              Just picks -> applyPicks picks ui { uiThinking = Nothing }
+
+-- | Collect a finished hint search, if one is in flight.
+pollHint :: UI -> IO UI
+pollHint ui = case uiHintReq ui of
+  Nothing -> pure ui
+  Just mv -> do
+    res <- tryTakeMVar mv
+    case res of
+      Nothing    -> pure ui
+      Just picks -> pure ui { uiHint = picks, uiHintReq = Nothing }
 
 -- | Fork the AI search; its (forced) result lands in a fresh 'MVar'.
 startThinking :: UI -> IO UI
@@ -172,6 +209,7 @@ drawUI ui = pure $ pictures [ translate 0 (layYShift l) boardGroup, statusPictur
       , coordinates l
       , pictures [ at p (stoneFor (cellAt board p)) | p <- occupiedPositions board ]
       , pictures [ at p (lastMarker rad)            | p <- gsLastMoves gs ]
+      , pictures [ at p (hintMarker rad)            | p <- uiHint ui ]
       , hoverGhost ui
       ]
     stoneFor (Stone pl) = litStone rad pl
@@ -198,7 +236,7 @@ statusPicture :: UI -> Picture
 statusPicture ui = pictures
   [ label x0 (y0 + 60) 0.15 (statusText ui)
   , label x0 (y0 + 30) 0.10 ("Difficulty: " ++ show (curLevel ui) ++ "   (1 easy / 2 medium / 3 hard)")
-  , label x0  y0       0.10 "Click: place    U: undo    R: restart    B/W: play Black or White"
+  , label x0  y0       0.10 "Click: place   U: undo   H: hint   R: restart   B/W: Black/White"
   ]
   where
     x0 = negate (boardPx / 2) + 18
@@ -209,7 +247,9 @@ statusText :: UI -> String
 statusText ui
   | Just (Won pl) <- uiOver ui = show pl ++ tag pl ++ " wins!"
   | Just Draw     <- uiOver ui = "Draw - the board is full."
+  | isJust (uiHintReq ui)      = "Computing hint (Hard AI)" ++ replicate dots '.'
   | isJust (uiThinking ui)     = "AI is thinking" ++ replicate dots '.'
+  | not (null (uiHint ui))     = "Hint: the Hard AI suggests the green cell(s)"
   | otherwise                  = show (gsToMove gs) ++ who
                                    ++ "  -  " ++ show (gsRemaining gs) ++ " stone(s) this turn"
   where

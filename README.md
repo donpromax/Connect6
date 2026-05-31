@@ -63,6 +63,7 @@ default (see below).
 | Move cursor | Arrow keys, `WASD`, or `hjkl` |
 | Place stone | `Space` / `Enter` |
 | Undo last move | `u` |
+| Hint (Hard AI suggests a move) | `?` |
 | Difficulty (new game) | `1` easy / `2` medium / `3` hard |
 | New game | `r` |
 | Quit | `q` |
@@ -76,13 +77,16 @@ an interactive terminal (macOS Terminal and iTerm2 both work).
 
 You choose a side and a difficulty (Easy / Medium / Hard) at the start. Enter
 moves as two 1-indexed numbers, `row col`, e.g. `10 10` (commas also accepted),
-or type `u` to **undo** your last move. You are prompted once per stone.
+type `u` to **undo** your last move, or `h` for a **hint** (the Hard AI's
+suggested move). You are prompted once per stone.
 
 ### Graphical window (`connect6-gui`)
 
-Click an intersection to place a stone. `U` undoes your last move; `1`/`2`/`3`
-start a new game on easy/medium/hard; `R` restarts; `B`/`W` start a new game as
-Black/White. Start at a difficulty with `--easy` / `--medium` / `--hard`.
+Click an intersection to place a stone. `H` (or `?`) shows a **hint** — the Hard
+AI's suggested move, marked with a green ring; `U` undoes your last move;
+`1`/`2`/`3` start a new game on easy/medium/hard; `R` restarts; `B`/`W` start a
+new game as Black/White. Start at a difficulty with `--easy` / `--medium` /
+`--hard`.
 
 The AI runs in a background thread, so your stone appears instantly and the
 window stays responsive (showing an animated "AI is thinking…") while it

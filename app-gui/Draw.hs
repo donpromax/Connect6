@@ -12,6 +12,7 @@ module Draw
   , litStone
   , ghostStone
   , lastMarker
+  , hintMarker
   ) where
 
 import Graphics.Gloss
@@ -23,7 +24,7 @@ import Layout
 deskColor :: Color
 deskColor = makeColorI 28 24 22 255          -- dark table behind the board
 
-frameDark, frameLight, wood, woodGrain, gridColor, coordColor, glow :: Color
+frameDark, frameLight, wood, woodGrain, gridColor, coordColor, glow, hintGlow :: Color
 frameDark  = makeColorI 70  44  22 255        -- outer frame
 frameLight = makeColorI 150 104 56 255        -- bevel highlight
 wood       = makeColorI 214 170 110 255       -- board surface
@@ -31,6 +32,7 @@ woodGrain  = makeColorI 198 152 96  255       -- subtle grain
 gridColor  = makeColorI 60  38  16 255        -- grid lines
 coordColor = makeColorI 90  62  30 255        -- edge coordinates
 glow       = makeColorI 220 60  50  255       -- last-move marker
+hintGlow   = makeColorI 60  200 90  255       -- AI hint marker (green)
 
 -- Board -----------------------------------------------------------------------
 
@@ -131,3 +133,9 @@ lastMarker :: Float -> Picture
 lastMarker r = pictures
   [ color (withAlpha 0.22 glow) (circleSolid (r * 0.5))
   , color glow (thickCircle (r * 0.42) 2.5) ]
+
+-- | A green ring + translucent disc marking a cell the AI suggests (the hint).
+hintMarker :: Float -> Picture
+hintMarker r = pictures
+  [ color (withAlpha 0.25 hintGlow) (circleSolid (r * 0.85))
+  , color hintGlow (thickCircle (r * 0.7) 3) ]

@@ -12,7 +12,7 @@ import Connect6.Input (parsePos, validateMove)
 type History = [GameState]
 
 -- | A parsed human command.
-data Cmd = CmdUndo | CmdPlace Pos
+data Cmd = CmdUndo | CmdPlace Pos | CmdHint
 
 main :: IO ()
 main = do
@@ -42,6 +42,13 @@ humanTurn hist gs = do
     CmdUndo -> case hist of
       (prev : rest) -> putStrLn "  (undo)\n" >> loop rest prev
       []            -> putStrLn "  Nothing to undo." >> humanTurn hist gs
+    CmdHint -> do
+      putStrLn "  Thinking (Hard AI)..."
+      let hcfg  = (gsConfig gs) { configLevel = Hard }
+          picks = chooseMoves hcfg (gsBoard gs) (gsToMove gs) (gsRemaining gs)
+      putStrLn ("  Hint: the Hard AI suggests "
+                ++ unwords [ show r ++ " " ++ show c | (r, c) <- picks ])
+      humanTurn hist gs
     CmdPlace pos ->
       let hist' = if null (gsPlaced gs) then gs : hist else hist  -- push at turn start
       in case applyMove pos gs of
@@ -81,12 +88,15 @@ finish gs outcome = do
 -- | Read a move or an undo command from the human.
 promptCmd :: GameState -> IO Cmd
 promptCmd gs = do
-  putStr "Your move (row col, or 'u' to undo): "
+  putStr "Your move (row col; 'u' undo; 'h' hint): "
   hFlush stdout
   line <- getLine
   case lower (trim line) of
     "u"    -> return CmdUndo
     "undo" -> return CmdUndo
+    "h"    -> return CmdHint
+    "hint" -> return CmdHint
+    "?"    -> return CmdHint
     _      -> case parsePos line >>= validateMove (gsBoard gs) of
                 Right p  -> return (CmdPlace p)
                 Left err -> putStrLn ("  " ++ err) >> promptCmd gs
