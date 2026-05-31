@@ -23,16 +23,20 @@ import Tui
 
 -- | Mutable-by-replacement UI state for the loop.
 data UI = UI
-  { uiState  :: !GameState
-  , uiOver   :: !(Maybe Outcome)
-  , uiCursor :: !Pos
+  { uiState   :: !GameState
+  , uiOver    :: !(Maybe Outcome)
+  , uiCursor  :: !Pos
+  , uiHistory :: ![GameState]   -- ^ past human-to-move states, for undo
   }
 
 main :: IO ()
 main = do
   args <- getArgs
   let human = if any (`elem` ["--white", "-w", "white"]) args then White else Black
-      ui0   = settle (freshUI human)
+      level | any (`elem` ["--easy"])   args = Easy
+            | any (`elem` ["--hard"])   args = Hard
+            | otherwise                      = Medium
+      ui0   = settle (freshUI level human)
   hSetBuffering stdout (BlockBuffering Nothing)
   tty <- hIsTerminalDevice stdin
   if not tty
@@ -44,14 +48,17 @@ main = do
     else withRawMode (loop ui0)
 
 -- | Build a fresh game; if the AI plays Black it opens immediately (via 'settle').
-freshUI :: Player -> UI
-freshUI human =
-  let cfg = defaultConfig { configHuman = human }
+freshUI :: Level -> Player -> UI
+freshUI level human =
+  let cfg = defaultConfig { configHuman = human, configLevel = level }
       mid = (configSize cfg + 1) `div` 2
-  in UI (initialState cfg) Nothing (mid, mid)
+  in UI (initialState cfg) Nothing (mid, mid) []
 
 humanOf :: UI -> Player
 humanOf = configHuman . gsConfig . uiState
+
+curLevel :: UI -> Level
+curLevel = configLevel . gsConfig . uiState
 
 -- | The current screen for a UI.
 frame :: UI -> String
@@ -65,19 +72,34 @@ loop ui = do
   hFlush stdout
   key <- readKeyIO
   case key of
-    KQuit    -> return ()
-    KRestart -> loop (settle (freshUI (humanOf ui)))
-    _ | Just _ <- uiOver ui -> loop ui          -- game over: only r/q act
-    KPlace   -> loop (settle (tryPlace ui))
-    KOther   -> loop ui
-    dir      -> loop ui { uiCursor = moveCursor (boardSize (gsBoard (uiState ui))) dir (uiCursor ui) }
+    KQuit     -> return ()
+    KRestart  -> loop (settle (freshUI (curLevel ui) (humanOf ui)))
+    KLevel l  -> loop (settle (freshUI l (humanOf ui)))   -- switch difficulty, new game
+    KUndo     -> loop (undo ui)
+    _ | Just _ <- uiOver ui -> loop ui          -- game over: only r/q/level/undo act
+    KPlace    -> loop (settle (tryPlace ui))
+    KOther    -> loop ui
+    dir       -> loop ui { uiCursor = moveCursor (boardSize (gsBoard (uiState ui))) dir (uiCursor ui) }
+
+-- | Revert to the previous human-to-move state, if any.
+undo :: UI -> UI
+undo ui = case uiHistory ui of
+  (prev : rest) -> ui { uiState = prev, uiOver = Nothing, uiHistory = rest }
+  []            -> ui
 
 -- | Place the human's stone under the cursor, if legal, then let the AI reply.
+-- Pushes the pre-turn state onto the history at the start of the human's turn.
 tryPlace :: UI -> UI
 tryPlace ui
-  | gsToMove (uiState ui) /= humanOf ui            = ui
-  | isEmpty (gsBoard (uiState ui)) (uiCursor ui)   = applyOne (uiCursor ui) ui
-  | otherwise                                      = ui
+  | gsToMove gs /= humanOf ui      = ui
+  | isEmpty (gsBoard gs) cursor    = applyOne cursor (pushHistory ui)
+  | otherwise                      = ui
+  where
+    gs     = uiState ui
+    cursor = uiCursor ui
+    pushHistory u
+      | null (gsPlaced gs) = u { uiHistory = gs : uiHistory u }   -- start of turn
+      | otherwise          = u
 
 -- | Apply one validated stone for the player to move.
 applyOne :: Pos -> UI -> UI

@@ -8,11 +8,13 @@ module Connect6.Types
   , Cell(..)
   , Pos
   , Board(..)
+  , Level(..)
   , GameConfig(..)
   , GameState(..)
   , Outcome(..)
   , opponent
   , stoneOf
+  , levelCode
   , defaultConfig
   ) where
 
@@ -29,6 +31,16 @@ data Cell = Empty | Stone Player
 -- | A board position as @(row, column)@, both 1-indexed.
 type Pos = (Int, Int)
 
+-- | AI difficulty. Maps to the C engine's search depth/budget (and VCF on 'Hard').
+data Level = Easy | Medium | Hard
+  deriving (Eq, Show)
+
+-- | Engine code for a difficulty level (0 easy, 1 medium, 2 hard).
+levelCode :: Level -> Int
+levelCode Easy   = 0
+levelCode Medium = 1
+levelCode Hard   = 2
+
 -- | Immutable game board: a square 'Array' indexed from @(1,1)@ to @(size,size)@.
 data Board = Board
   { boardSize  :: !Int
@@ -37,9 +49,10 @@ data Board = Board
 
 -- | Static rules for a game.
 data GameConfig = GameConfig
-  { configSize     :: !Int  -- ^ Board edge length (e.g. 19).
-  , configWinLen   :: !Int  -- ^ Stones in a row needed to win (6 for Connect6).
+  { configSize     :: !Int    -- ^ Board edge length (e.g. 19).
+  , configWinLen   :: !Int    -- ^ Stones in a row needed to win (6 for Connect6).
   , configHuman    :: !Player
+  , configLevel    :: !Level  -- ^ AI difficulty.
   }
 
 -- | Full mutable-by-replacement game state threaded through the main loop.
@@ -65,10 +78,11 @@ opponent White = Black
 stoneOf :: Player -> Cell
 stoneOf = Stone
 
--- | Standard Connect6: 19x19 board, six in a row, human plays Black.
+-- | Standard Connect6: 19x19 board, six in a row, human plays Black, hard AI.
 defaultConfig :: GameConfig
 defaultConfig = GameConfig
   { configSize   = 19
   , configWinLen = 6
   , configHuman  = Black
+  , configLevel  = Hard
   }

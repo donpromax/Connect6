@@ -1,6 +1,7 @@
 /* Connect6 search engine — C core called from Haskell via FFI.
  *
  * The board is row-major, n*n int8 cells: 0 = empty, 1 = Black, 2 = White.
+ * `level` selects difficulty: 0 = easy, 1 = medium, 2 = hard.
  * c6_choose_moves writes the chosen cell indices (row*n + col) into `out`
  * (length >= stones) and returns how many it wrote.
  */
@@ -10,6 +11,6 @@
 #include <stdint.h>
 
 int c6_choose_moves(const int8_t *board, int n, int winlen,
-                    int player, int stones, int *out);
+                    int player, int stones, int level, int *out);
 
 #endif /* CONNECT6_ENGINE_H */

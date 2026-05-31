@@ -6,7 +6,8 @@ module Main (main) where
 
 import System.Exit (exitFailure, exitSuccess)
 import Data.IORef
-import Data.List (sort)
+import Data.List (sort, foldl')
+import Data.Maybe (isJust)
 import Connect6.Types
 import Connect6.Board
 import Connect6.Game
@@ -103,6 +104,30 @@ main = do
   check "C engine returns legal empty cells"
         (let ps = Engine.chooseMoves defaultConfig twoThreats Black 2
          in length ps == 2 && all (isEmpty twoThreats) ps)
+
+  -- The search completes an immediate two-stone six from an open four (no single
+  -- stone wins, so this exercises the win-detection inside the search).
+  let openFour = foldr (placeStone Black) (emptyBoard 19) [(10, c) | c <- [5 .. 8]]
+      killPicks = Engine.chooseMoves defaultConfig openFour Black 2
+      afterKill = foldl' (\bd p -> placeStone Black p bd) openFour killPicks
+  check "C engine completes a six from an open four"
+        (length killPicks == 2
+           && any (\p -> isJust (winningRunAt 6 afterKill Black p)) killPicks)
+
+  -- Identical inputs give identical moves (fixed Zobrist seed; no randomness).
+  check "C engine is deterministic"
+        (Engine.chooseMoves defaultConfig twoThreats Black 2
+           == Engine.chooseMoves defaultConfig twoThreats Black 2)
+
+  -- Every difficulty returns two legal cells and still takes an immediate win.
+  let atLevel l = defaultConfig { configLevel = l }
+      levels    = [Easy, Medium, Hard]
+  check "all difficulties take an immediate win"
+        (all (\l -> let p = head (Engine.chooseMoves (atLevel l) openFive Black 2)
+                    in p == (10, 3) || p == (10, 9)) levels)
+  check "all difficulties return two legal cells"
+        (all (\l -> let ps = Engine.chooseMoves (atLevel l) twoThreats Black 2
+                    in length ps == 2 && all (isEmpty twoThreats) ps) levels)
 
   n <- readIORef failures
   if n == 0

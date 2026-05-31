@@ -27,6 +27,7 @@ foreign import ccall unsafe "c6_choose_moves"
     -> CInt       -- ^ winlen
     -> CInt       -- ^ player (1 black, 2 white)
     -> CInt       -- ^ stones to place
+    -> CInt       -- ^ level (0 easy, 1 medium, 2 hard)
     -> Ptr CInt   -- ^ out buffer (length >= stones)
     -> IO CInt    -- ^ number of moves written
 
@@ -36,7 +37,8 @@ chooseMoves :: GameConfig -> Board -> Player -> Int -> [Pos]
 chooseMoves cfg board pl stones = unsafePerformIO $
   withArray cells $ \bptr ->
     allocaArray stones $ \out -> do
-      k <- c_choose_moves bptr (ci n) (ci (configWinLen cfg)) (ci (code pl)) (ci stones) out
+      k <- c_choose_moves bptr (ci n) (ci (configWinLen cfg)) (ci (code pl))
+                          (ci stones) (ci (levelCode (configLevel cfg))) out
       idxs <- peekArray (fromIntegral k) out
       pure (map decode idxs)
   where

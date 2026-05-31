@@ -62,22 +62,27 @@ default (see below).
 |--------|------|
 | Move cursor | Arrow keys, `WASD`, or `hjkl` |
 | Place stone | `Space` / `Enter` |
+| Undo last move | `u` |
+| Difficulty (new game) | `1` easy / `2` medium / `3` hard |
 | New game | `r` |
 | Quit | `q` |
 
-Play White (move second) with `cabal run connect6-tui -- --white`. The cursor
-tile is highlighted; the most recent stones are flagged in orange. Needs an
-interactive terminal (macOS Terminal and iTerm2 both work).
+Play White (move second) with `cabal run connect6-tui -- --white`, and pick a
+starting difficulty with `--easy` / `--medium` / `--hard` (default medium). The
+cursor tile is highlighted; the most recent stones are flagged in orange. Needs
+an interactive terminal (macOS Terminal and iTerm2 both work).
 
 ### Plain CLI (`connect6`)
 
-Enter moves as two 1-indexed numbers, `row col`, e.g. `10 10` (commas also
-accepted). You are prompted once per stone.
+You choose a side and a difficulty (Easy / Medium / Hard) at the start. Enter
+moves as two 1-indexed numbers, `row col`, e.g. `10 10` (commas also accepted),
+or type `u` to **undo** your last move. You are prompted once per stone.
 
 ### Graphical window (`connect6-gui`)
 
-Click an intersection to place a stone. `R` restarts; `B`/`W` start a new game
-as Black/White.
+Click an intersection to place a stone. `U` undoes your last move; `1`/`2`/`3`
+start a new game on easy/medium/hard; `R` restarts; `B`/`W` start a new game as
+Black/White. Start at a difficulty with `--easy` / `--medium` / `--hard`.
 
 ## The graphical GUI (Gloss)
 
@@ -137,25 +142,25 @@ Haskell via the FFI (`Connect6.Engine`). Keeping the hot search loop in C lets i
 search several plies deep within an interactive time budget; C compiles with the
 toolchain GHC already ships, so no extra dependency is needed.
 
-The engine combines forcing rules with an **alpha-beta search** that understands
-the two-stones-per-turn rule (the side to move only flips after both stones are
-placed):
+The engine combines forcing rules with a **negamax alpha-beta search** that
+understands the two-stones-per-turn rule (the side to move only flips after both
+stones are placed):
 
 1. **Win now.** If a stone completes six, play it.
-2. **Alpha-beta + iterative deepening.** Otherwise it searches candidate stones
-   (move-ordered by a window threat score, pruned to the best ~10 per node),
-   deepening until a node budget is hit so moves stay fast (~0.2 s). Leaves use a
-   whole-board threat evaluation split into **offense** (own potential) and
-   **defense** (denying the opponent). Because a line where the opponent can
-   complete six is scored as a loss, the search blocks every immediate threat —
-   spending both stones when two separate threats must be blocked — while
-   building its own.
+2. **VCF (hard only).** A forced-win prover that explores **only forcing moves**
+   (those that make a "four"), so it can prove a guaranteed kill cheaply — e.g. a
+   turn that creates three simultaneous winning points the opponent's two stones
+   can't all block. It is conservative: it never claims a win that isn't forced.
+3. **Alpha-beta + iterative deepening**, sped up by a **Zobrist transposition
+   table** (caches searched positions and orders moves by the cached best move,
+   so the same budget searches deeper). Leaves use a whole-board threat
+   evaluation split into **offense** and **defense**; a line the opponent can
+   complete is scored as a loss, so the search blocks every immediate threat
+   (both stones when two must be blocked) while building its own.
 
-A pure-Haskell reference AI (`Connect6.AI`, forcing rules + a one-turn pair
-search) is kept for tests and as a fallback. The engine will not miss an
-immediate win, blocks coordinated threats with both stones, and looks far enough
-ahead that a beginner struggles to beat it. Deeper forced-win (VCF/VCT) search
-and a transposition table are natural next steps.
+**Difficulty** scales the search: *Easy* (shallow, no planning), *Medium*
+(deeper), *Hard* (deepest + VCF). A pure-Haskell reference AI (`Connect6.AI`,
+forcing rules + a one-turn pair search) is kept for tests and as a fallback.
 
 ## Tests
 

@@ -20,51 +20,75 @@ import Draw
 
 -- | The full UI world.
 data UI = UI
-  { uiState  :: !GameState
-  , uiOver   :: !(Maybe Outcome)
-  , uiLayout :: !Layout
-  , uiHover  :: !(Maybe Pos)
+  { uiState   :: !GameState
+  , uiOver    :: !(Maybe Outcome)
+  , uiLayout  :: !Layout
+  , uiHover   :: !(Maybe Pos)
+  , uiHistory :: ![GameState]   -- ^ past human-to-move states, for undo
   }
 
 main :: IO ()
 main = do
   args <- getArgs
   let human = if any (`elem` ["--white", "-w", "white"]) args then White else Black
+      level | any (`elem` ["--easy"]) args = Easy
+            | any (`elem` ["--hard"]) args = Hard
+            | otherwise                    = Medium
   play (InWindow "Connect6 / 六子棋" windowSize (60, 60))
        deskColor   -- window background (the table)
        30          -- frames per second
-       (newGame human)
+       (newGame level human)
        drawUI
        onEvent
        (\_ w -> w)  -- no time-based stepping
 
 -- | Start a fresh game, letting the AI open if it plays Black.
-newGame :: Player -> UI
-newGame human =
-  let cfg = defaultConfig { configHuman = human }
-  in settle (UI (initialState cfg) Nothing (mkLayout (configSize cfg)) Nothing)
+newGame :: Level -> Player -> UI
+newGame level human =
+  let cfg = defaultConfig { configHuman = human, configLevel = level }
+  in settle (UI (initialState cfg) Nothing (mkLayout (configSize cfg)) Nothing [])
 
 humanOf :: UI -> Player
 humanOf = configHuman . gsConfig . uiState
+
+curLevel :: UI -> Level
+curLevel = configLevel . gsConfig . uiState
 
 -- Event handling -------------------------------------------------------------
 
 onEvent :: Event -> UI -> UI
 onEvent (EventKey (MouseButton LeftButton) Down _ pt) ui = handleClick pt ui
 onEvent (EventMotion pt) ui = ui { uiHover = pixelToCell (uiLayout ui) pt }
-onEvent (EventKey (Char 'r') Down _ _) ui = (newGame (humanOf ui)) { uiHover = uiHover ui }
-onEvent (EventKey (Char 'b') Down _ _) _  = newGame Black
-onEvent (EventKey (Char 'w') Down _ _) _  = newGame White
+onEvent (EventKey (Char 'r') Down _ _) ui = (newGame (curLevel ui) (humanOf ui)) { uiHover = uiHover ui }
+onEvent (EventKey (Char 'b') Down _ _) _  = newGame Medium Black
+onEvent (EventKey (Char 'w') Down _ _) _  = newGame Medium White
+onEvent (EventKey (Char 'u') Down _ _) ui = undo ui
+onEvent (EventKey (Char '1') Down _ _) ui = newGame Easy   (humanOf ui)
+onEvent (EventKey (Char '2') Down _ _) ui = newGame Medium (humanOf ui)
+onEvent (EventKey (Char '3') Down _ _) ui = newGame Hard   (humanOf ui)
 onEvent _ ui = ui
 
+-- | Revert to the previous human-to-move state, if any.
+undo :: UI -> UI
+undo ui = case uiHistory ui of
+  (prev : rest) -> ui { uiState = prev, uiOver = Nothing, uiHistory = rest }
+  []            -> ui
+
 -- | Place a human stone on a legal empty intersection, then let the AI reply.
+-- The pre-turn state is pushed onto the history at the start of the human's turn.
 handleClick :: (Float, Float) -> UI -> UI
 handleClick pt ui
   | Just _ <- uiOver ui                          = ui
   | gsToMove (uiState ui) /= humanOf ui          = ui
   | Just pos <- pixelToCell (uiLayout ui) pt
-  , isEmpty (gsBoard (uiState ui)) pos           = settle (applyOne pos ui)
+  , isEmpty (gsBoard (uiState ui)) pos           = settle (applyOne pos (pushHistory ui))
   | otherwise                                    = ui
+
+-- | Snapshot the current state at the start of the human's turn.
+pushHistory :: UI -> UI
+pushHistory ui
+  | null (gsPlaced (uiState ui)) = ui { uiHistory = uiState ui : uiHistory ui }
+  | otherwise                    = ui
 
 applyOne :: Pos -> UI -> UI
 applyOne pos ui =
@@ -128,12 +152,13 @@ hoverGhost ui
 -- | Status strip below the board: current turn / result, plus the controls.
 statusPicture :: UI -> Picture
 statusPicture ui = pictures
-  [ label x0 (y0 + 24) 0.17 (statusText ui)
-  , label x0  y0       0.11 "Click to place   |   R: restart   |   B/W: new game as Black/White"
+  [ label x0 (y0 + 30) 0.17 (statusText ui)
+  , label x0 (y0 + 8)  0.10 ("Difficulty: " ++ show (curLevel ui) ++ "  (1/2/3 = easy/medium/hard)")
+  , label x0  y0       0.10 "Click: place   U: undo   R: restart   B/W: play Black/White"
   ]
   where
     x0 = negate (boardPx / 2) + 18
-    y0 = negate (boardPx + statusH) / 2 + 16
+    y0 = negate (boardPx + statusH) / 2 + 12
     label x y s str = translate x y (scale s s (color white (text str)))
 
 statusText :: UI -> String

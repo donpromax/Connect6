@@ -14,7 +14,8 @@ import Connect6.Types
 import Connect6.Board (cellAt)
 
 -- | A classified key press.
-data Key = KUp | KDown | KLeft | KRight | KPlace | KQuit | KRestart | KOther
+data Key = KUp | KDown | KLeft | KRight | KPlace | KUndo | KQuit | KRestart
+         | KLevel Level | KOther
   deriving (Eq, Show)
 
 -- | Classify a key from the raw characters read so far. The caller passes the
@@ -28,6 +29,11 @@ classifyKey c escSeq = case c of
   ' '    -> KPlace
   '\n'   -> KPlace
   '\r'   -> KPlace
+  'u'    -> KUndo
+  'U'    -> KUndo
+  '1'    -> KLevel Easy
+  '2'    -> KLevel Medium
+  '3'    -> KLevel Hard
   'w'    -> KUp
   's'    -> KDown
   'a'    -> KLeft
@@ -88,7 +94,8 @@ render human outcome cursor gs = concat
   , header
   , concatMap rowLine [1 .. n]
   , "\n  " ++ statusLine human outcome gs ++ "\n"
-  , "  Move: arrows / WASD / hjkl   Place: space   New game: r   Quit: q\n"
+  , "  Difficulty: " ++ show (configLevel (gsConfig gs)) ++ "  (1 easy / 2 medium / 3 hard)\n"
+  , "  Move: arrows/WASD/hjkl  Place: space  Undo: u  New game: r  Quit: q\n"
   ]
   where
     n         = boardSize board
