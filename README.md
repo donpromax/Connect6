@@ -84,6 +84,12 @@ Click an intersection to place a stone. `U` undoes your last move; `1`/`2`/`3`
 start a new game on easy/medium/hard; `R` restarts; `B`/`W` start a new game as
 Black/White. Start at a difficulty with `--easy` / `--medium` / `--hard`.
 
+The AI runs in a background thread, so your stone appears instantly and the
+window stays responsive (showing an animated "AI is thinking…") while it
+searches. Stone placements play a short sound via macOS's `afplay` (silently
+skipped on systems without it). Built with `-threaded`; the engine FFI call is
+`safe` so the search never blocks the render loop.
+
 ## The graphical GUI (Gloss)
 
 The window front-end uses [Gloss](https://hackage.haskell.org/package/gloss),

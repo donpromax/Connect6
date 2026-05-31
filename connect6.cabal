@@ -68,9 +68,12 @@ executable connect6-gui
     main-is:          Main.hs
     other-modules:    Layout
                       Draw
+    -- -threaded so the AI can run in a background thread without freezing the UI
+    ghc-options:      -threaded
     build-depends:    base,
                       connect6,
-                      gloss >=1.13 && <1.14
+                      gloss >=1.13 && <1.14,
+                      process
     default-language: Haskell2010
 
 test-suite connect6-test

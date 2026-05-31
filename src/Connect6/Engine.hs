@@ -20,7 +20,10 @@ import System.IO.Unsafe (unsafePerformIO)
 import Connect6.Types
 import Connect6.Board (cellAt)
 
-foreign import ccall unsafe "c6_choose_moves"
+-- NOTE: imported as @safe@ (not @unsafe@) so a long search running in a forked
+-- thread releases the RTS capability and does not block other Haskell threads
+-- (e.g. the GUI's render loop). The per-call overhead is negligible here.
+foreign import ccall safe "c6_choose_moves"
   c_choose_moves
     :: Ptr Int8   -- ^ board, row-major n*n (0 empty, 1 black, 2 white)
     -> CInt       -- ^ n
