@@ -14,9 +14,13 @@ module Layout
 
 import Connect6.Types (Pos)
 
--- | Edge length of the square board drawing area, in pixels.
+-- | Edge length of the square board drawing area, in pixels — the main
+-- resolution knob. Larger means more pixels per stone (and Gloss tessellates
+-- bigger circles with more segments, so they look smoother). The window is
+-- @boardPx x (boardPx + statusH)@, so raise this if you have screen height to
+-- spare and lower it if the window is too tall. 900 gives a ~21 px stone radius.
 boardPx :: Float
-boardPx = 760
+boardPx = 900
 
 -- | Height of the status strip below the board, in pixels. Tall enough for
 -- three well-spaced Gloss text lines (which are ~100 units tall at scale 1).

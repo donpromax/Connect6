@@ -111,7 +111,7 @@ sphere r edge hi = pictures
         rr  = r * (1 - 0.9 * t)
         d   = r * 0.22 * t
         col = mixColors (1 - t) t edge hi ]
-  where steps = 16 :: Int
+  where steps = 28 :: Int
 
 -- | A few stacked translucent discs, offset down-right, for a soft shadow.
 softShadow :: Float -> Picture
