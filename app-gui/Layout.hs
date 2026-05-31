@@ -18,9 +18,10 @@ import Connect6.Types (Pos)
 boardPx :: Float
 boardPx = 760
 
--- | Height of the status strip below the board, in pixels.
+-- | Height of the status strip below the board, in pixels. Tall enough for
+-- three well-spaced Gloss text lines (which are ~100 units tall at scale 1).
 statusH :: Float
-statusH = 76
+statusH = 104
 
 -- | Empty border between the board edge and the outermost grid line.
 marginPx :: Float

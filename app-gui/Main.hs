@@ -150,15 +150,18 @@ hoverGhost ui
     gs = uiState ui
 
 -- | Status strip below the board: current turn / result, plus the controls.
+-- | Status strip: three lines, spaced ~30 px apart so the vector text never
+-- overlaps. (A Gloss text glyph is roughly 100 units tall at scale 1, so a line
+-- at scale s is ~100*s px high; 30 px clears even the largest line here.)
 statusPicture :: UI -> Picture
 statusPicture ui = pictures
-  [ label x0 (y0 + 30) 0.17 (statusText ui)
-  , label x0 (y0 + 8)  0.10 ("Difficulty: " ++ show (curLevel ui) ++ "  (1/2/3 = easy/medium/hard)")
-  , label x0  y0       0.10 "Click: place   U: undo   R: restart   B/W: play Black/White"
+  [ label x0 (y0 + 60) 0.15 (statusText ui)
+  , label x0 (y0 + 30) 0.10 ("Difficulty: " ++ show (curLevel ui) ++ "   (1 easy / 2 medium / 3 hard)")
+  , label x0  y0       0.10 "Click: place    U: undo    R: restart    B/W: play Black or White"
   ]
   where
     x0 = negate (boardPx / 2) + 18
-    y0 = negate (boardPx + statusH) / 2 + 12
+    y0 = negate (boardPx + statusH) / 2 + 14
     label x y s str = translate x y (scale s s (color white (text str)))
 
 statusText :: UI -> String
