@@ -1,0 +1,11 @@
+# Stack configuration for reproducible builds.
+#
+# LTS 16.31 ships GHC 8.8.4 and a compatible gloss, so both the terminal UI and
+# the graphical GUI build from a single resolver:
+#
+#   stack run connect6-tui
+#   stack run --flag connect6:gui connect6-gui
+resolver: lts-16.31
+
+packages:
+  - .

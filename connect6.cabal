@@ -1,0 +1,83 @@
+cabal-version:      2.4
+name:               connect6
+version:            0.1.0.0
+synopsis:           Connect6 (六子棋) with a CLI board and a human-vs-AI mode.
+description:        A terminal Connect6 game. Two players alternate placing two
+                    stones per turn (one stone on the opening move) on a 19x19
+                    board; the first to line up six stones wins. Includes a
+                    heuristic AI opponent.
+license:            MIT
+author:             Connect6 Project
+build-type:         Simple
+
+-- The graphical front-end pulls in Gloss/OpenGL/GLUT. It is off by default so
+-- the core, CLI, TUI, and tests build with only GHC boot libraries (no network
+-- needed). Enable it with `-fgui` once Gloss is available.
+flag gui
+    description: Build the graphical (Gloss) front-end executable.
+    default:     False
+    manual:      True
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    hs-source-dirs:   src
+    exposed-modules:  Connect6.Types
+                      Connect6.Board
+                      Connect6.Game
+                      Connect6.AI
+                      Connect6.Engine
+                      Connect6.Render
+                      Connect6.Input
+    c-sources:        cbits/engine.c
+    include-dirs:     cbits
+    build-depends:    base    >=4 && <5,
+                      array,
+                      containers
+    default-language: Haskell2010
+
+executable connect6
+    import:           warnings
+    hs-source-dirs:   app
+    main-is:          Main.hs
+    build-depends:    base,
+                      connect6
+    default-language: Haskell2010
+
+-- Full-screen terminal front-end (ANSI colours, cursor navigation). Uses only
+-- GHC boot libraries, so it builds with no extra downloads.
+executable connect6-tui
+    import:           warnings
+    hs-source-dirs:   app-tui
+    main-is:          Main.hs
+    other-modules:    Tui
+    build-depends:    base,
+                      connect6,
+                      unix
+    default-language: Haskell2010
+
+-- Graphical (window) front-end. Kept as a separate executable so the CLI and
+-- the test-suite never need the OpenGL/GLUT graphics dependencies.
+executable connect6-gui
+    import:           warnings
+    if !flag(gui)
+        buildable: False
+    hs-source-dirs:   app-gui
+    main-is:          Main.hs
+    other-modules:    Layout
+                      Draw
+    build-depends:    base,
+                      connect6,
+                      gloss >=1.13 && <1.14
+    default-language: Haskell2010
+
+test-suite connect6-test
+    import:           warnings
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Spec.hs
+    build-depends:    base,
+                      connect6
+    default-language: Haskell2010
